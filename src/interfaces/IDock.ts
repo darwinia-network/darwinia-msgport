@@ -12,5 +12,5 @@ export type IDock = {
     messagePayload: string,
     feeMultiplier: number,
     params: string
-  ) => Promise<number>;
+  ) => Promise<BigInt>;
 };

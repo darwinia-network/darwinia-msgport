@@ -24,7 +24,7 @@ export type IMsgport = {
     messagePayload: string,
     feeMultiplier: number,
     params: string
-  ) => Promise<number>;
+  ) => Promise<BigInt>;
 
   send: (
     toChainId: ChainId,
@@ -33,5 +33,5 @@ export type IMsgport = {
     messagePayload: string,
     feeMultiplier: number,
     params: string
-  ) => Promise<ethers.providers.TransactionResponse | null>;
+  ) => Promise<ethers.providers.TransactionResponse | `0x${string}` | null>;
 };

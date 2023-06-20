@@ -1,5 +1,6 @@
 import { IEstimateFee } from "../interfaces/IEstimateFee";
-import { ethers } from "ethers";
+import { PublicClient, getContract } from "viem";
+import { decodeAbiParameters, parseAbiParameters } from "viem";
 import {
   Environment,
   AxelarQueryAPI,
@@ -14,7 +15,7 @@ axelarNativeTokens[EvmChain.BNBCHAIN] = GasToken.BINANCE;
 axelarNativeTokens[EvmChain.FANTOM] = GasToken.FTM;
 
 async function buildEstimateFeeFunction(
-  provider: ethers.providers.Provider,
+  provider: PublicClient,
   senderDockAddress: string,
   environment: Environment
 ) {
@@ -23,11 +24,11 @@ async function buildEstimateFeeFunction(
   });
 
   // dock
-  const dock = new ethers.Contract(
-    senderDockAddress,
-    AxelarDockContract.abi,
-    provider
-  );
+  const dock = getContract({
+    address: senderDockAddress as `0x${string}`,
+    abi: AxelarDockContract.abi,
+    publicClient: provider,
+  });
 
   const estimateFee: IEstimateFee = async (
     fromChainId,
@@ -39,26 +40,28 @@ async function buildEstimateFeeFunction(
     params
   ) => {
     console.log(`fromChainId: ${fromChainId}, toChainId: ${toChainId}`);
-    const axelarSrcChainName = await dock.chainIdDown(fromChainId);
-    const axelarDstChainName = await dock.chainIdDown(toChainId);
+    const axelarSrcChainName = await dock.read.chainIdDown([fromChainId]);
+    const axelarDstChainName = await dock.read.chainIdDown([toChainId]);
     console.log(
       `axelarSrcChainName: ${axelarSrcChainName}, axelarDstChainName: ${axelarDstChainName}`
     );
 
-    const gasLimit = ethers.utils.defaultAbiCoder.decode(
-      ["uint256"],
-      params
+    const gasLimit = decodeAbiParameters(
+      parseAbiParameters("uint256"),
+      params as `0x${string}`
     )[0];
     console.log(`gasLimit: ${gasLimit}`);
+    // convert gasLimit to number
+    // const gasLimitNumber = parseInt(gasLimit);
 
-    const axelarSrcGasToken = axelarNativeTokens[axelarSrcChainName];
+    const axelarSrcGasToken = axelarNativeTokens[axelarSrcChainName as string];
 
-    return parseInt(
+    return BigInt(
       (await sdk.estimateGasFee(
-        axelarSrcChainName,
-        axelarDstChainName,
+        axelarSrcChainName as string,
+        axelarDstChainName as string,
         axelarSrcGasToken,
-        gasLimit,
+        Number(gasLimit),
         feeMultiplier,
         "2025000000"
       )) as string

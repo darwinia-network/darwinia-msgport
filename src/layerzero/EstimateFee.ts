@@ -1,24 +1,28 @@
 import { IEstimateFee } from "../interfaces/IEstimateFee";
-import { ethers } from "ethers";
+import { PublicClient, getContract } from "viem";
+import { encodeAbiParameters, parseAbiParameters } from "viem";
 import LayerZeroDockContract from "../../artifacts/contracts/docks/LayerZeroDock.sol/LayerZeroDock.json";
+import ILayerZeroEndpoint from "@layerzerolabs/solidity-examples/artifacts/contracts/interfaces/ILayerZeroEndpoint.sol/ILayerZeroEndpoint.json";
+import Decimal from "decimal.js";
 
 async function buildEstimateFeeFunction(
-  provider: ethers.providers.Provider,
+  provider: PublicClient,
   senderDockAddress: string
 ) {
   // dock
-  const senderDock = new ethers.Contract(
-    senderDockAddress,
-    LayerZeroDockContract.abi,
-    provider
-  );
-  const lzEndpointAddress = await senderDock.lzEndpointAddress();
+  const senderDock = getContract({
+    address: senderDockAddress as `0x${string}`,
+    abi: LayerZeroDockContract.abi,
+    publicClient: provider,
+  });
+  const lzEndpointAddress = await senderDock.read.lzEndpointAddress();
 
-  // endpoint
-  const abi = [
-    "function estimateFees(uint16 _dstChainId, address _userApplication, bytes calldata _payload, bool _payInZRO, bytes calldata _adapterParams) external view returns (uint nativeFee, uint zroFee)",
-  ];
-  const endpoint = new ethers.Contract(lzEndpointAddress, abi, provider);
+  // lzEndpoint
+  const lzEndpoint = getContract({
+    address: lzEndpointAddress as `0x${string}`,
+    abi: ILayerZeroEndpoint.abi,
+    publicClient: provider,
+  });
 
   // estimateFee function
   const estimateFee: IEstimateFee = async (
@@ -31,24 +35,33 @@ async function buildEstimateFeeFunction(
     params
   ) => {
     console.log(`fromChainId: ${fromChainId}, toChainId: ${toChainId}`);
-    const lzSrcChainId = await senderDock.chainIdDown(fromChainId);
-    const lzDstChainId = await senderDock.chainIdDown(toChainId);
+    const lzSrcChainId = await senderDock.read.chainIdDown([fromChainId]);
+    const lzDstChainId = await senderDock.read.chainIdDown([toChainId]);
     console.log(`lzSrcChainId: ${lzSrcChainId}, lzDstChainId: ${lzDstChainId}`);
 
-    const payload = ethers.utils.defaultAbiCoder.encode(
-      ["address", "address", "address", "bytes"],
-      [senderDockAddress, fromDappAddress, toDappAddress, messagePayload]
+    const payload = encodeAbiParameters(
+      parseAbiParameters("address, address, address, bytes"),
+      [
+        senderDockAddress as `0x${string}`,
+        fromDappAddress as `0x${string}`,
+        toDappAddress as `0x${string}`,
+        messagePayload as `0x${string}`,
+      ]
     );
 
     console.log(`params: ${params}`);
-    const result = await endpoint.estimateFees(
+    const decimalfeeMultiplier: Decimal = new Decimal(feeMultiplier);
+
+    const result = (await lzEndpoint.read.estimateFees([
       lzDstChainId,
       senderDockAddress,
       payload,
       false,
-      params
-    );
-    return result.nativeFee * feeMultiplier;
+      params,
+    ])) as [bigint, bigint];
+    const d: Decimal = decimalfeeMultiplier.times(result[0].toString());
+
+    return BigInt(d.toFixed(0));
   };
 
   return estimateFee;

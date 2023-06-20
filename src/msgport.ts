@@ -1,4 +1,4 @@
-import { ethers } from "ethers";
+import { PublicClient, WalletClient, getContract, parseUnits } from "viem";
 import { getDock, DockType } from "./dock";
 import DefaultMsgportContract from "../artifacts/contracts/MessagePort.sol/MessagePort.json";
 import { IDockSelectionStrategy } from "./interfaces/IDockSelectionStrategy";
@@ -9,27 +9,29 @@ import { ChainId } from "./chain-ids";
 export { DockType };
 
 export async function getMsgport(
-  provider: ethers.providers.Provider,
+  publicClient: PublicClient,
+  walletClient: WalletClient,
   msgportAddress: string
 ) {
-  const msgport = new ethers.Contract(
-    msgportAddress,
-    DefaultMsgportContract.abi,
-    provider
-  );
+  const msgport = getContract({
+    address: msgportAddress as `0x${string}`,
+    abi: DefaultMsgportContract.abi,
+    publicClient: publicClient,
+  });
 
   const result: IMsgport = {
     getLocalChainId: async () => {
-      return await msgport.getLocalChainId();
+      return (await msgport.read.getLocalChainId()) as number;
     },
 
     getLocalDockAddress: async (
       toChainId: ChainId,
       selectDock: IDockSelectionStrategy
     ) => {
-      const localDockAddresses = await msgport.getLocalDockAddressesByToChainId(
-        toChainId
-      );
+      const localDockAddresses =
+        (await msgport.read.getLocalDockAddressesByToChainId([
+          toChainId,
+        ])) as string[];
       return await selectDock(localDockAddresses);
     },
 
@@ -43,12 +45,14 @@ export async function getMsgport(
       console.log(
         `localDockAddress: ${localDockAddress}, dockType: ${dockType}`
       );
-      return await getDock(provider, localDockAddress, dockType);
+      return await getDock(publicClient, localDockAddress, dockType);
     },
 
     getLocalDockAddressesByToChainId: async (toChainId: ChainId) => {
       console.log(`toChainId: ${toChainId}`);
-      return await msgport.getLocalDockAddressesByToChainId(toChainId);
+      return (await msgport.read.getLocalDockAddressesByToChainId([
+        toChainId,
+      ])) as string[];
     },
 
     estimateFee: async (
@@ -85,26 +89,31 @@ export async function getMsgport(
         feeMultiplier,
         params
       );
-      const feeBN = ethers.BigNumber.from(`${fee}`);
-      console.log(`cross-chain fee: ${fee / 1e18} UNITs.`);
+      console.log(`fee: ${fee.valueOf()}`);
 
-      // Send message
-      const tx = await msgport.send(
-        localDock.address,
-        toChainId,
-        toDappAddress,
-        messagePayload,
-        params,
-        {
-          value: feeBN,
-        }
-      );
+      // Send message through msgport
+      const { request } = await publicClient.simulateContract({
+        address: msgportAddress as `0x${string}`,
+        account: walletClient.account,
+        abi: DefaultMsgportContract.abi,
+        functionName: "send",
+        args: [
+          localDock.address,
+          toChainId,
+          toDappAddress,
+          messagePayload,
+          params,
+        ],
+        value: fee.valueOf(),
+      });
+      const txHash = await walletClient.writeContract(request);
+      console.log(`txHash: ${txHash}`);
 
       console.log(
         `message "${messagePayload}" has been sent to ${toDappAddress} through msgport ${msgportAddress}`
       );
 
-      return tx;
+      return txHash;
     },
   };
 

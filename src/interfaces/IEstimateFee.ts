@@ -6,4 +6,4 @@ export type IEstimateFee = (
   messagePayload: string,
   feeMultiplier: number,
   params: string
-) => Promise<number>;
+) => Promise<BigInt>;

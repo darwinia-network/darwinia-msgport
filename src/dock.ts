@@ -1,4 +1,4 @@
-import { ethers } from "ethers";
+import { PublicClient, getContract } from "viem";
 import { IEstimateFee } from "./interfaces/IEstimateFee";
 import { layerzero } from "./layerzero/index";
 import { axelar } from "./axelar/index";
@@ -16,15 +16,15 @@ enum DockType {
 }
 
 async function getDock(
-  provider: ethers.providers.Provider,
+  provider: PublicClient,
   dockAddress: string,
   dockType: DockType
 ) {
-  const dock = new ethers.Contract(
-    dockAddress,
-    BaseMessageDockContract.abi,
-    provider
-  );
+  const dock = getContract({
+    address: dockAddress as `0x${string}`,
+    abi: BaseMessageDockContract.abi,
+    publicClient: provider,
+  });
 
   let estimateFee: IEstimateFee = await buildEstimateFunction(
     provider,
@@ -36,23 +36,32 @@ async function getDock(
     address: dockAddress,
 
     getLocalChainId: async () => {
-      return await dock.getLocalChainId();
+      return (await dock.read.getLocalChainId()) as number;
     },
 
     getOutboundLane: async (remoteChainId: number) => {
-      const outboundLane = await dock.outboundLanes(remoteChainId);
+      const outboundLane = (await dock.read.outboundLanes([remoteChainId])) as [
+        number,
+        string,
+        number
+      ];
+
       return {
         fromChainId: await result.getLocalChainId(),
         fromDockAddress: dockAddress,
-        toChainId: outboundLane["toChainId"],
-        toDockAddress: outboundLane["toDockAddress"],
-        nonce: outboundLane["nonce"],
+        toChainId: outboundLane[0],
+        toDockAddress: outboundLane[1],
+        nonce: outboundLane[2],
       };
     },
 
     getRemoteDockAddress: async (remoteChainId: number) => {
-      const lane = await dock.outboundLanes(remoteChainId);
-      return lane["toDockAddress"];
+      const lane = (await dock.read.outboundLanes([remoteChainId])) as [
+        number,
+        string,
+        number
+      ];
+      return lane[1];
     },
 
     estimateFee: async (
@@ -65,9 +74,8 @@ async function getDock(
         remoteChainId
       );
       console.log(`remoteDockAddress: ${remoteDockAddress}`);
-
       return await estimateFee(
-        await dock.getLocalChainId(),
+        (await dock.read.getLocalChainId()) as number,
         dockAddress,
         remoteChainId,
         remoteDockAddress,
@@ -82,7 +90,7 @@ async function getDock(
 }
 
 async function buildEstimateFunction(
-  provider: ethers.providers.Provider,
+  provider: PublicClient,
   dockType: DockType,
   dockAddress: string
 ) {
