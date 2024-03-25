@@ -1,0 +1,6 @@
+{
+  "name": "ORMP-U",
+  "provider": "Msgport",
+  "description": "ORMPUpgradeablePort by Msgport",
+  "api": "https://github.com/darwinia-network/darwinia-msgport-api/blob/main/README.md"
+}

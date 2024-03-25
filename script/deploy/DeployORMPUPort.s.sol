@@ -7,7 +7,7 @@ import {console2 as console} from "forge-std/console2.sol";
 import {Common} from "create3-deploy/script/Common.s.sol";
 import {ScriptTools} from "create3-deploy/script/ScriptTools.sol";
 
-import "../../src/ports/ORMPPort.sol";
+import "../../src/ports/ORMPUpgradeablePort.sol";
 
 interface III {
     function owner() external view returns (address);
@@ -15,7 +15,7 @@ interface III {
     function pendingOwner() external view returns (address);
 }
 
-contract DeployORMPPort is Common {
+contract DeployORMPUPort is Common {
     using stdJson for string;
     using ScriptTools for string;
 
@@ -31,7 +31,7 @@ contract DeployORMPPort is Common {
     address dao;
 
     function name() public pure override returns (string memory) {
-        return "DeployORMPPort";
+        return "DeployORMPUPort";
     }
 
     function setUp() public override {
@@ -42,8 +42,8 @@ contract DeployORMPPort is Common {
         config = ScriptTools.readInput(instanceId);
         c3 = ScriptTools.readInput("../c3");
         ORMP = c3.readAddress(".ORMP_ADDR");
-        ADDR = c3.readAddress(".ORMPPORT_ADDR");
-        SALT = c3.readBytes32(".ORMPPORT_SALT");
+        ADDR = c3.readAddress(".ORMPUPORT_ADDR");
+        SALT = c3.readBytes32(".ORMPUPORT_SALT");
 
         deployer = config.readAddress(".DEPLOYER");
         dao = config.readAddress(".DAO");
@@ -61,12 +61,12 @@ contract DeployORMPPort is Common {
 
     function deploy() public broadcast returns (address) {
         string memory name_ = config.readString(".metadata.name");
-        bytes memory byteCode = type(ORMPPort).creationCode;
+        bytes memory byteCode = type(ORMPUpgradeablePort).creationCode;
         bytes memory initCode = bytes.concat(byteCode, abi.encode(deployer, ORMP, name_));
         address port = _deploy3(SALT, initCode);
         require(port == ADDR, "!addr");
         require(III(ADDR).owner() == deployer);
-        console.log("ORMPPort deployed: %s", port);
+        console.log("ORMPUpgradeablePort deployed: %s", port);
         return port;
     }
 
